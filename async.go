@@ -2,9 +2,7 @@ package async // import "code.nkcmr.net/async"
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
-	"time"
 )
 
 // Promise is an abstract representation of a value that might eventually be
@@ -61,6 +59,23 @@ func (s *syncPromise[T]) reject(err error) {
 	}
 }
 
+// NewPromise wraps a function in a goroutine that will make the result of that
+// function deliver its result to the holder of the promise.
+func NewPromise[T any](fn func() (T, error)) Promise[T] {
+	c := &syncPromise[T]{
+		done: make(chan struct{}),
+	}
+	go func() {
+		v, err := fn()
+		if err != nil {
+			c.reject(err)
+		} else {
+			c.resolve(v)
+		}
+	}()
+	return c
+}
+
 type rp[T any] struct {
 	result result[T]
 }
@@ -83,26 +98,12 @@ func Reject[T any](err error) Promise[T] {
 	return &rp[T]{result: result[T]{err: err}}
 }
 
-// NewPromise wraps a function in a goroutine that will make the result of that
-// function deliver its result to the holder of the promise.
-func NewPromise[T any](fn func() (T, error)) Promise[T] {
-	c := &syncPromise[T]{
-		done: make(chan struct{}),
-	}
-	go func() {
-		v, err := fn()
-		if err != nil {
-			c.reject(err)
-		} else {
-			c.resolve(v)
-		}
-	}()
-	return c
-}
-
 // All takes a slice of promises and will await the result of all of the
 // specified promises. If any promise should return an error, the wh
 func All[T any](ctx context.Context, promises []Promise[T]) ([]T, error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithCancel(ctx)
+	defer cancel()
 	out := make([]T, len(promises))
 	errc := make(chan error, len(out))
 	waiter := func(i int, p Promise[T]) {
@@ -115,6 +116,7 @@ func All[T any](ctx context.Context, promises []Promise[T]) ([]T, error) {
 	}
 	for i := 0; i < len(out); i++ {
 		if err := <-errc; err != nil {
+			cancel()
 			return nil, err
 		}
 	}
