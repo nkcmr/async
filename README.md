@@ -1,6 +1,8 @@
 # async go
 
-a prototype of "promises" in go1.18
+a prototype of "promises" in go1.18.
+
+**note**: this is just an experiment used to test alternate patterns for dealing with asynchronous code in go. i would not recommend adopting this pattern blindly (especially in production environments) until there is a broader consensus in the go community about this. it might turn out that through some hands-on experience that go's native channels/goroutines are a good enough abstraction and there are no gains to be made from building on top of them.
 
 ## install
 
